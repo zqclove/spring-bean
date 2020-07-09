@@ -61,29 +61,35 @@ Eureka服务治理体系如下：
 创建一个Spring Boot工程，命名问Eureka-Server，并在pom文件中引入依赖：
 
 ```xml
-<dependencies>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-eureka-server</artifactId>
-        </dependency>
+<parent>
+	<groupId>org.springframework.boot</groupId>
+	<artifactId>spring-boot-starter-parent</artifactId>
+	<version>2.3.1.RELEASE</version>
+	<relativePath/> <!-- lookup parent from repository -->
+</parent>
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
+<properties>
+	<java.version>1.8</java.version>
+	<spring-cloud.version>Hoxton.SR6</spring-cloud.version>
+</properties>
+
+<dependencies>
+	<dependency>
+		<groupId>org.springframework.cloud</groupId>
+		<artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+	</dependency>
 </dependencies>
 
 <dependencyManagement>
-     <dependencies>
-         <dependency>
-             <groupId>org.springframework.cloud</groupId>
-             <artifactId>spring-cloud-dependencies</artifactId>
-             <version>${spring-cloud.version}</version>
-             <type>pom</type>
-             <scope>import</scope>
-         </dependency>
-     </dependencies>
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-dependencies</artifactId>
+			<version>${spring-cloud.version}</version>
+			<type>pom</type>
+			<scope>import</scope>
+		</dependency>
+	</dependencies>
 </dependencyManagement>
 ```
 
@@ -100,14 +106,14 @@ server.port=1110
 #服务注册中心实例的主机名
 eureka.instance.hostname=localhost
 
-#是否向服务注册中心注册自己
+#是否想服务注册中心注册自身服务
 eureka.client.register-with-eureka=false
 
 #是否检索服务
 eureka.client.fetch-registry=false
 
 #服务注册中心的配置内容，指定服务注册中心的位置
-eureka.client.serviceUrl.defaultZone=http://${eureka.instance.hostname}:${server.port}/eureka/
+eureka.client.serverUrl.defaultZone=http://${eureka.instace.hostname}:${server.port}/eureka/
 ```
 
 ### 启动服务中心
@@ -144,7 +150,8 @@ server.port=1111
 
 eureka.instance.hostname=master
 
-eureka.client.register-with-eureka=false
+#疑问，这里是设置为true还是false？
+eureka.client.register-with-eureka=false 
 
 eureka.client.fetch-registry=false
 
@@ -295,9 +302,731 @@ eureka.client.serviceUrl.defaultZone=http://<username>:<password>@${eureka.insta
 
 ### 创建并注册服务提供者
 
+#### 创建Eureka Client服务
+
+创建一个Spring Boot工程，命名问Eureka-Client，并在pom文件中引入依赖：
+
+```xml
+<parent>
+	<groupId>org.springframework.boot</groupId>
+	<artifactId>spring-boot-starter-parent</artifactId>
+	<version>2.3.1.RELEASE</version>
+	<relativePath /> <!-- lookup parent from repository -->
+</parent>
+
+<properties>
+	<java.version>1.8</java.version>
+	<spring-cloud.version>Hoxton.SR6</spring-cloud.version>
+</properties>
+
+<dependencies>
+	<dependency>
+		<groupId>org.springframework.cloud</groupId>
+		<artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+	</dependency>
+
+	<dependency>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-web</artifactId>
+	</dependency>
+</dependencies>
+
+<dependencyManagement>
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.cloud</groupId>
+			<artifactId>spring-cloud-dependencies</artifactId>
+			<version>${spring-cloud.version}</version>
+			<type>pom</type>
+			<scope>import</scope>
+		</dependency>
+	</dependencies>	</dependencyManagement>
+```
+
+#### Eureka Client相关配置
+
+在Eureka客户端中需要在application.properties文件中指定服务注册中心地址
+
+```properties
+#指定服务端口
+server.port=1120
+
+#指定服务名称
+spring.application.name=hello-service
+
+#指定注册中心端口
+eureka.client.proxy-port=1110
+
+#指定注册中心实例名称
+eureka.instance.hostname=localhost
+
+#指定服务注册中心地址
+eureka.client.service-url.defaultZone=http://${eureka.instance.hostname}:${eureka.client.proxy-port}/eureka/
+```
+
+#### 启动Eureka客户端
+
+```java
+@SpringBootApplication
+@EnableEurekaClient
+public class EurekaClientApplication {
+
+	public static void main(String[] args) {
+		SpringApplication.run(EurekaClientApplication.class, args);
+	}
+
+}
+```
+
+#### 遇到的问题
+
+```
+问题描述：在启动Eureka客户端后立即下线服务了
+
+日志打印错误：Unregistering application xxx with eureka with status DOWN
+
+解决方案：导入spring-boot-starter-web依赖即可解决
+```
+
+## 服务消费者
+
+### 获取服务
+
+​	消费者服务启动时，会发送一个REST请求到服务注册中心，用于获取注册中心的服务清单。为了性能考虑，Eureka Server会维护一份只读的服务注册清单来返回给服务消费者客户端，同时该缓存清单默认会间隔30秒更新一次。
+
+下面是获取服务的两个重要的属性：
+
+```properties
+#是否需要去检索寻找服务，默认是true
+eureka.client.fetch-registry
+ 
+#表示eureka client间隔多久去拉取服务注册信息，默认为30秒，对于api-gateway，如果要迅速获取服务注册状态，可以缩小该值，比如5秒
+eureka.client.registry-fetch-interval-seconds
+```
 
 
 
+### 服务调用
+
+​	服务消费者在获取服务清单后，通过服务名可以获取具体提供服务的实例名和该实例的元数据信息。因为有这些服务实例的详细信息，所以客户端可以根据自己的需要决定具体调用哪个实例，在Ribbon中会默认采用轮询的方式进行调用，从而实现客户端的负载均衡。
+
+### 服务下线
+
+​	在系统运行过程中必然会面临关闭或重启服务的某个实例的情况，在服务关闭操作时，会触发一个服务下线的REST服务请求给Eureka  Server，告诉服务注册中心：“我要下线了。”服务端在接收到该请求后，将该服务状态置位下线（DOWN），并把该下线事件传播出去。
+
+​	服务下线主要发生在服务提供者，但服务消费者也可以同时是服务提供者。
+
+## 配置详解
+
+ ![img](https://img-blog.csdn.net/20170727222209291?watermark/2/text/aHR0cDovL2Jsb2cuY3Nkbi5uZXQvc3VuaHVpbGlhbmc4NQ==/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70/gravity/Center)
+
+### **Eureka客户端配置**
+
+1、RegistryFetchIntervalSeconds
+
+   从eureka服务器注册表中获取注册信息的时间间隔（s），默认为30秒
+
+2、InstanceInfoReplicationIntervalSeconds
+
+   复制实例变化信息到eureka服务器所需要的时间间隔（s），默认为30秒
+
+3、InitialInstanceInfoReplicationIntervalSeconds
+
+   最初复制实例信息到eureka服务器所需的时间（s），默认为40秒
+
+4、EurekaServiceUrlPollIntervalSeconds
+
+   询问Eureka服务url信息变化的时间间隔（s），默认为300秒
+
+5、ProxyHost
+
+   获取eureka服务的代理主机，默认为null
+
+6、ProxyProxyPort
+
+   获取eureka服务的代理端口, 默认为null 
+
+7、ProxyUserName
+
+   获取eureka服务的代理用户名，默认为null
+
+8、ProxyPassword
+
+   获取eureka服务的代理密码，默认为null 
+
+9、GZipContent
+
+​    eureka注册表的内容是否被压缩，默认为true，并且是在最好的网络流量下被压缩
+
+10、EurekaServerReadTimeoutSeconds
+
+   eureka需要超时读取之前需要等待的时间，默认为8秒
+
+11、EurekaServerConnectTimeoutSeconds
+
+   eureka需要超时连接之前需要等待的时间，默认为5秒
+
+12、BackupRegistryImpl
+
+   获取实现了eureka客户端在第一次启动时读取注册表的信息作为回退选项的实现名称
+
+13、EurekaServerTotalConnections
+
+​    eureka客户端允许所有eureka服务器连接的总数目，默认是200
+
+14、EurekaServerTotalConnectionsPerHost
+
+​    eureka客户端允许eureka服务器主机连接的总数目，默认是50
+
+15、EurekaServerURLContext
+
+​    表示eureka注册中心的路径，如果配置为eureka，则为http://x.x.x.x:x/eureka/，在eureka的配置文件中加入此配置表示eureka作为客户端向注册中心注册，从而构成eureka集群。此配置只有在eureka服务器ip地址列表是在DNS中才会用到，默认为null
+
+16、EurekaServerPort
+
+​    获取eureka服务器的端口，此配置只有在eureka服务器ip地址列表是在DNS中才会用到。默认为null
+
+17、EurekaServerDNSName
+
+​    获取要查询的DNS名称来获得eureka服务器，此配置只有在eureka服务器ip地址列表是在DNS中才会用到。默认为null
+
+18、UseDnsForFetchingServiceUrls
+
+​    eureka客户端是否应该使用DNS机制来获取eureka服务器的地址列表，默认为false
+
+19、RegisterWithEureka
+
+​    实例是否在eureka服务器上注册自己的信息以供其他服务发现，默认为true
+
+20、PreferSameZoneEureka
+
+​    实例是否使用同一zone里的eureka服务器，默认为true，理想状态下，eureka客户端与服务端是在同一zone下
+
+21、AllowRedirects
+
+​    服务器是否能够重定向客户端请求到备份服务器。 如果设置为false，服务器将直接处理请求，如果设置为true，它可能发送HTTP重定向到客户端。默认为false
+
+22、LogDeltaDiff
+
+​    是否记录eureka服务器和客户端之间在注册表的信息方面的差异，默认为false
+
+23、DisableDelta(*)
+
+​    默认为false
+
+24、fetchRegistryForRemoteRegions
+
+​    eureka服务注册表信息里的以逗号隔开的地区名单，如果不这样返回这些地区名单，则客户端启动将会出错。默认为null
+
+25、Region
+
+​    获取实例所在的地区。默认为us-east-1
+
+26、AvailabilityZones
+
+​    获取实例所在的地区下可用性的区域列表，用逗号隔开。
+
+27、EurekaServerServiceUrls
+
+​    Eureka服务器的连接，默认为http：//XXXX：X/eureka/,但是如果采用DNS方式获取服务地址，则不需要配置此设置。
+
+28、FilterOnlyUpInstances（*）
+
+​    是否获得处于开启状态的实例的应用程序过滤之后的应用程序。默认为true
+
+29、EurekaConnectionIdleTimeoutSeconds
+
+​    Eureka服务的http请求关闭之前其响应的时间，默认为30 秒
+
+30、FetchRegistry
+
+​    此客户端是否获取eureka服务器注册表上的注册信息，默认为true
+
+31、RegistryRefreshSingleVipAddress
+
+​    此客户端只对一个单一的VIP注册表的信息感兴趣。默认为null
+
+32、HeartbeatExecutorThreadPoolSize(*)
+
+​    心跳执行程序线程池的大小,默认为5
+
+33、HeartbeatExecutorExponentialBackOffBound(*)
+
+​    心跳执行程序回退相关的属性，是重试延迟的最大倍数值，默认为10
+
+34、CacheRefreshExecutorThreadPoolSize(*)
+
+​    执行程序缓存刷新线程池的大小，默认为5
+
+35、CacheRefreshExecutorExponentialBackOffBound
+
+​    执行程序指数回退刷新的相关属性，是重试延迟的最大倍数值，默认为10
+
+36、DollarReplacement
+
+​    eureka服务器序列化/反序列化的信息中获取“$”符号的的替换字符串。默认为“_-”
+
+37、EscapeCharReplacement
+
+​    eureka服务器序列化/反序列化的信息中获取“_”符号的的替换字符串。默认为“__”
+
+38、OnDemandUpdateStatusChange（*）
+
+​    如果设置为true,客户端的状态更新将会点播更新到远程服务器上，默认为true
+
+39、EncoderName
+
+​    这是一个短暂的编码器的配置，如果最新的编码器是稳定的，则可以去除，默认为null
+
+40、DecoderName
+
+​    这是一个短暂的解码器的配置，如果最新的解码器是稳定的，则可以去除，默认为null
+
+41、ClientDataAccept（*）
+
+​    客户端数据接收
+
+42、Experimental（*）
+
+​    当尝试新功能迁移过程时，为了避免配置API污染，相应的配置即可投入实验配置部分，默认为null
+
+###  **Eureka服务端配置**
+
+   1、AWSAccessId
+
+​    获取aws访问的id，主要用于弹性ip绑定，此配置是用于aws上的，默认为null
+
+​    2、AWSSecretKey
+
+​    获取aws私有秘钥，主要用于弹性ip绑定，此配置是用于aws上的，默认为null
+
+​    3、EIPBindRebindRetries
+
+​    获取服务器尝试绑定到候选的EIP的次数，默认为3
+
+​    4、EIPBindingRetryIntervalMsWhenUnbound(*)
+
+​    服务器检查ip绑定的时间间隔，单位为毫秒，默认为1 * 60 * 1000
+
+​    5、EIPBindingRetryIntervalMs
+
+​    与上面的是同一作用，仅仅是稳定状态检查，默认为5 * 60 * 1000
+
+​    6、EnableSelfPreservation
+
+​    自我保护模式，当出现出现网络分区、eureka在短时间内丢失过多客户端时，会进入自我保护模式，即一个服务长时间没有发送心跳，eureka也不会将其删除，默认为true
+
+​    7、RenewalPercentThreshold(*)
+
+​    ![img](https://images2015.cnblogs.com/blog/952935/201706/952935-20170623150643570-1733575926.png)
+
+​    阈值因子，默认是0.85，如果阈值比最小值大，则自我保护模式开启
+
+​    8、RenewalThresholdUpdateIntervalMs
+
+​    阈值更新的时间间隔，单位为毫秒，默认为15 * 60 * 1000
+
+​    9、PeerEurekaNodesUpdateIntervalMs(*)
+
+​    集群里eureka节点的变化信息更新的时间间隔，单位为毫秒，默认为10 * 60 * 1000
+
+​    10、EnableReplicatedRequestCompression
+
+​    复制的数据在发送请求时是否被压缩，默认为false
+
+​    11、NumberOfReplicationRetries
+
+​    获取集群里服务器尝试复制数据的次数，默认为5
+
+​    12、PeerEurekaStatusRefreshTimeIntervalMs
+
+​    服务器节点的状态信息被更新的时间间隔，单位为毫秒，默认为30 * 1000
+
+​    13、WaitTimeInMsWhenSyncEmpty(*)
+
+​    在Eureka服务器获取不到集群里对等服务器上的实例时，需要等待的时间，单位为毫秒，默认为1000 * 60 * 5
+
+​    14、PeerNodeConnectTimeoutMs
+
+​    连接对等节点服务器复制的超时的时间，单位为毫秒，默认为200
+
+​    15、PeerNodeReadTimeoutMs
+
+​    读取对等节点服务器复制的超时的时间，单位为毫秒，默认为200
+
+​    16、PeerNodeTotalConnections
+
+​    获取对等节点上http连接的总数，默认为1000
+
+​    17、PeerNodeTotalConnectionsPerHost(*)
+
+​    获取特定的对等节点上http连接的总数，默认为500
+
+​    18、PeerNodeConnectionIdleTimeoutSeconds(*)
+
+​    http连接被清理之后服务器的空闲时间，默认为30秒
+
+​    19、RetentionTimeInMSInDeltaQueue(*)
+
+​    客户端保持增量信息缓存的时间，从而保证不会丢失这些信息，单位为毫秒，默认为3 * 60 * 1000
+
+​    20、DeltaRetentionTimerIntervalInMs
+
+​    清理任务程序被唤醒的时间间隔，清理过期的增量信息，单位为毫秒，默认为30 * 1000
+
+​    21、EvictionIntervalTimerInMs
+
+​    过期实例应该启动并运行的时间间隔，单位为毫秒，默认为60 * 1000
+
+​    22、ASGQueryTimeoutMs（*）
+
+​    查询AWS上ASG（自动缩放组）信息的超时值，单位为毫秒，默认为300
+
+​    23、ASGUpdateIntervalMs
+
+​    从AWS上更新ASG信息的时间间隔，单位为毫秒，默认为5 * 60 * 1000
+
+​    24、ASGCacheExpiryTimeoutMs(*)
+
+​    缓存ASG信息的到期时间，单位为毫秒，默认为10 * 60 * 1000
+
+​    25、ResponseCacheAutoExpirationInSeconds（*）
+
+​    当注册表信息被改变时，则其被保存在缓存中不失效的时间，默认为180秒
+
+​    26、ResponseCacheUpdateIntervalMs（*）
+
+​    客户端的有效负载缓存应该更新的时间间隔，默认为30 * 1000毫秒
+
+​    27、UseReadOnlyResponseCache（*）
+
+​    目前采用的是二级缓存策略，一个是读写高速缓存过期策略，另一个没有过期只有只读缓存，默认为true，表示只读缓存
+
+​    28、DisableDelta（*）
+
+​    增量信息是否可以提供给客户端看，默认为false
+
+​    29、MaxIdleThreadInMinutesAgeForStatusReplication（*）
+
+​    状态复制线程可以保持存活的空闲时间，默认为10分钟
+
+​    30、MinThreadsForStatusReplication
+
+​    被用于状态复制的线程的最小数目，默认为1
+
+​    31、MaxThreadsForStatusReplication
+
+​    被用于状态复制的线程的最大数目，默认为1
+
+​    32、MaxElementsInStatusReplicationPool
+
+​    可允许的状态复制池备份复制事件的最大数量，默认为10000
+
+​    33、SyncWhenTimestampDiffers
+
+​    当时间变化实例是否跟着同步，默认为true
+
+​    34、RegistrySyncRetries
+
+​    当eureka服务器启动时尝试去获取集群里其他服务器上的注册信息的次数，默认为5
+
+​    35、RegistrySyncRetryWaitMs
+
+​    当eureka服务器启动时获取其他服务器的注册信息失败时，会再次尝试获取，期间需要等待的时间，默认为30 * 1000毫秒
+
+​    36、MaxElementsInPeerReplicationPool（*）
+
+​    复制池备份复制事件的最大数量，默认为10000
+
+​    37、MaxIdleThreadAgeInMinutesForPeerReplication（*）
+
+​    复制线程可以保持存活的空闲时间，默认为15分钟
+
+​    38、MinThreadsForPeerReplication（*）
+
+​    获取将被用于复制线程的最小数目，默认为5
+
+​    39、MaxThreadsForPeerReplication
+
+​    获取将被用于复制线程的最大数目，默认为20
+
+​    40、MaxTimeForReplication（*）
+
+​    尝试在丢弃复制事件之前进行复制的时间，默认为30000毫秒
+
+​    41、PrimeAwsReplicaConnections（*）
+
+​    对集群中服务器节点的连接是否应该准备，默认为true
+
+​    42、DisableDeltaForRemoteRegions（*）
+
+​    增量信息是否可以提供给客户端或一些远程地区，默认为false
+
+​    43、RemoteRegionConnectTimeoutMs（*）
+
+​    连接到对等远程地eureka节点的超时时间，默认为1000毫秒
+
+​    44、RemoteRegionReadTimeoutMs（*）
+
+​    获取从远程地区eureka节点读取信息的超时时间，默认为1000毫秒
+
+​    45、RemoteRegionTotalConnections
+
+​    获取远程地区对等节点上http连接的总数，默认为1000
+
+​    46、RemoteRegionTotalConnectionsPerHost
+
+​    获取远程地区特定的对等节点上http连接的总数，默认为500
+
+​    47、RemoteRegionConnectionIdleTimeoutSeconds
+
+​    http连接被清理之后远程地区服务器的空闲时间，默认为30秒
+
+​    48、GZipContentFromRemoteRegion（*）
+
+​    eureka服务器中获取的内容是否在远程地区被压缩，默认为true
+
+​    49、RemoteRegionUrlsWithName
+
+​    针对远程地区发现的网址域名的map
+
+​    50、RemoteRegionUrls
+
+​    远程地区的URL列表
+
+​    51、RemoteRegionAppWhitelist（*）
+
+​    必须通过远程区域中检索的应用程序的列表
+
+​    52、RemoteRegionRegistryFetchInterval
+
+​    从远程区域取出该注册表的信息的时间间隔，默认为30秒
+
+​    53、RemoteRegionFetchThreadPoolSize
+
+​    用于执行远程区域注册表请求的线程池的大小，默认为20
+
+​    54、RemoteRegionTrustStore
+
+​    用来合格请求远程区域注册表的信任存储文件，默认为空
+
+​    55、RemoteRegionTrustStorePassword
+
+​    获取偏远地区信任存储文件的密码，默认为“changeit”
+
+​    56、disableTransparentFallbackToOtherRegion(*)
+
+​    如果在远程区域本地没有实例运行，对于应用程序回退的旧行为是否被禁用， 默认为false
+
+​    57、BatchReplication(*)
+
+​    表示集群节点之间的复制是否为了网络效率而进行批处理，默认为false
+
+​    58、LogIdentityHeaders(*)
+
+​    Eureka服务器是否应该登录clientAuthHeaders，默认为true
+
+​    59、RateLimiterEnabled
+
+​    限流是否应启用或禁用，默认为false
+
+​    60、RateLimiterThrottleStandardClients
+
+​    是否对标准客户端进行限流，默认false
+
+​    61、RateLimiterPrivilegedClients（*）
+
+​    认证的客户端列表，这里是除了标准的eureka Java客户端。
+
+​    62、RateLimiterBurstSize（*）
+
+​    速率限制的burst size ，默认为10，这里用的是令牌桶算法
+
+​    63、RateLimiterRegistryFetchAverageRate(*)
+
+​    速率限制器用的是令牌桶算法，此配置指定平均执行注册请求速率，默认为500
+
+​    64、RateLimiterFullFetchAverageRate（*）
+
+​    速率限制器用的是令牌桶算法，此配置指定平均执行请求速率，默认为100
+
+​    65、ListAutoScalingGroupsRoleName（*）
+
+​    用来描述从AWS第三账户的自动缩放组中的角色名称，默认为“ListAutoScalingGroups”
+
+​    66、JsonCodecName（*）
+
+​    如果没有设置默认的编解码器将使用全JSON编解码器，获取的是编码器的类名称
+
+​    67、XmlCodecName(*)
+
+​    如果没有设置默认的编解码器将使用xml编解码器，获取的是编码器的类名称
+
+​    68、BindingStrategy(*)
+
+​    获取配置绑定EIP或Route53的策略。
+
+​    69、Route53DomainTTL（*）
+
+​    用于建立route53域的ttl，默认为301
+
+​    70、Route53BindRebindRetries（*）
+
+​    服务器尝试绑定到候选Route53域的次数，默认为3
+
+​    71、Route53BindingRetryIntervalMs（*）
+
+​    服务器应该检查是否和Route53域绑定的时间间隔，默认为5 * 60 * 1000毫秒
+
+​    72、Experimental(*)
+
+​    当尝试新功能迁移过程时，为了避免配置API污染，相应的配置即可投入实验配置部分，默认为null
+
+### **实例微服务端配置**
+
+​    1、InstanceId
+
+​    此实例注册到eureka服务端的唯一的实例ID,其组成为${spring.application.name}:${spring.application.instance_id:${random.value}}
+
+​    2、Appname
+
+​    获得在eureka服务上注册的应用程序的名字，默认为unknow
+
+​    3、AppGroupName
+
+​    获得在eureka服务上注册的应用程序组的名字，默认为unknow
+
+​    4、InstanceEnabledOnit（*）
+
+​    实例注册到eureka服务器时，是否开启通讯，默认为false
+
+​    5、NonSecurePort
+
+​    获取该实例应该接收通信的非安全端口。默认为80
+
+​    6、SecurePort
+
+​    获取该实例应该接收通信的安全端口，默认为443
+
+​    7、NonSecurePortEnabled
+
+​    该实例应该接收通信的非安全端口是否启用，默认为true
+
+​    8、SecurePortEnabled
+
+​    该实例应该接收通信的安全端口是否启用，默认为false
+
+​    9、LeaseRenewalIntervalInSeconds
+
+​    eureka客户需要多长时间发送心跳给eureka服务器，表明它仍然活着,默认为30 秒
+
+​    10、LeaseExpirationDurationInSeconds
+
+​    Eureka服务器在接收到实例的最后一次发出的心跳后，需要等待多久才可以将此实例删除，默认为90秒
+
+​    11、VirtualHostName
+
+​    此实例定义的虚拟主机名，其他实例将通过使用虚拟主机名找到该实例。
+
+​    12、SecureVirtualHostName
+
+​    此实例定义的安全虚拟主机名
+
+​    13、ASGName（*）
+
+​    与此实例相关联 AWS自动缩放组名称。此项配置是在AWS环境专门使用的实例启动，它已被用于流量停用后自动把一个实例退出服务。
+
+​    14、HostName
+
+​    与此实例相关联的主机名，是其他实例可以用来进行请求的准确名称
+
+​    15、MetadataMap(*)
+
+​    获取与此实例相关联的元数据(key,value)。这个信息被发送到eureka服务器，其他实例可以使用。
+
+​    16、DataCenterInfo（*）
+
+​    该实例被部署在数据中心
+
+​    17、IpAddress
+
+​    获取实例的ip地址
+
+​    18、StatusPageUrlPath（*）
+
+​    获取此实例状态页的URL路径，然后构造出主机名，安全端口等，默认为/info
+
+​    19、StatusPageUrl(*)
+
+​    获取此实例绝对状态页的URL路径，为其他服务提供信息时来找到这个实例的状态的路径，默认为null
+
+​    20、HomePageUrlPath（*）
+
+​    获取此实例的相关主页URL路径，然后构造出主机名，安全端口等，默认为/
+
+​    21、HomePageUrl(*)
+
+​    获取此实例的绝对主页URL路径，为其他服务提供信息时使用的路径,默认为null
+
+​    22、HealthCheckUrlPath
+
+​    获取此实例的相对健康检查URL路径，默认为/health
+
+​    23、HealthCheckUrl
+
+​    获取此实例的绝对健康检查URL路径,默认为null
+
+​    24、SecureHealthCheckUrl
+
+​    获取此实例的绝对安全健康检查网页的URL路径，默认为null
+
+​    25、DefaultAddressResolutionOrder
+
+​    获取实例的网络地址，默认为[]
+
+​    26、Namespace
+
+​    获取用于查找属性的命名空间，默认为eureka
+
+## 服务实例类配置
+
+### 端点配置
+
+​	eureka实例的状态页面和健康监控的url默认为spring boot actuator提供的/info端点和/health端点。我们必须确保Eureka客户端的/health端点在发送元数据的时候，是一个能够被注册中心访问到的地址，否则服务注册中心不会根据应用的健康检查来更改状态（仅当开启了healthcheck功能时，以该端点信息作为健康检查标准）。而如果/info端点不正确的话，会导致在Eureka面板中单击服务时，无法访问到服务实例提供的信息接口。
+
+​	大多数情况下，我们不需要修改这个几个url配置。但是当应用不使用默认的上下文(context path或servlet path，比如配置server.servletPath=/test），或者管理终端路径（比如配置management.contextPath=/admin）时，我们需要修改健康检查和状态页的url地址信息。
+
+application.yml配置文件如下：
+
+```properties
+server.context-path=/helloeureka
+
+#下面配置为相对路径，也支持配置成绝对路径，例如需要支持https
+
+eureka.instance.health-check-url-path=${server.context-path}/health
+
+eureka.instance.status-page-url-path=${server.context-path}/info
+```
+
+### 元数据
+
+​	默认情况下，Eureka中各个服务实例的健康检测并不是通过spring-boot-acturator模块的/health端点来实现的，而是依靠客户端心跳的方式来保持服务实例的存活。在Eureka的服务续约与剔除机制下，客户端的健康状态从注册到注册中心开始都会处于UP状态，除非心跳终止一段时间之后，服务注册中心将其剔除。默认的心跳实现方式可以有效检查客户端进程是否正常运作，但却无法保证客户端应用能够正常提供服务。
+
+​	在Spring Cloud Eureka中，可以把Eureka客户端的健康检测交给spring-boot-actuator模块的health端点，以实现更加全面的健康状态维护，设置方式如下：
+
+（1）      在pom.xml中引入spring-boot-starter-actuator模块的依赖
+
+（2）      在application.properties中增加参数配置eureka.client.healthcheck.enabled=true
+
+### 其他配置
+
+除了上述配置参数外，下面整理了一些EurekaInstanceConfigBean中定义的配置参数以及对应的说明和默认值，这些参数均以eureka.instance为前缀。
+
+![img](https://img-blog.csdn.net/20170727222240599?watermark/2/text/aHR0cDovL2Jsb2cuY3Nkbi5uZXQvc3VuaHVpbGlhbmc4NQ==/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70/gravity/Center)
+
+## 通讯协议
+
+​	默认情况下，Eureka使用Jersey和XStream配合JSON作为Server与Client之间的通讯协议。也可以选择实现自己的协议来代替。 
 
 ## 与Zookeeper对比
 
@@ -325,7 +1054,57 @@ eureka.client.serviceUrl.defaultZone=http://<username>:<password>@${eureka.insta
 
 ​	如果Eureka服务节点在短时间里丢失了大量的心跳连接(注：可能发生了网络故障)，那么这个  Eureka节点会进入“自我保护模式”，同时保留那些“心跳死亡”的服务注册信息不过期。此时，这个Eureka节点对于新的服务还能提供注册服务，对于“死亡”的仍然保留，以防还有客户端向其发起请求。当网络故障恢复后，这个Eureka节点会退出“自我保护模式”。Eureka的哲学是，同时保留“好数据”与“坏数据”总比丢掉任何数据要更好。
 
+# Spring Cloud Ribbon
+
+### 介绍
+
+​	Spring Cloud 提供了让服务调用端具备负载均衡能力的Ribbon，通过和Eureka的紧密结合，不用在服务集群内再架设负载均衡服务，很大程度简化了服务集群内的架构。
+
+​	服务调用端通过获取服务清单，获取到服务提供者的详细信息，使得在服务调用端实现负载均衡。
+
+### 配置
+
+![img](https://images2017.cnblogs.com/blog/166781/201802/166781-20180214012425859-1316261402.png)
+
+**详解：**
+
+#### 1.RibbonAutoConfiguration配置生成RibbonLoadBalancerClient实例
+
+代码位置：
+
+jar包 ：spring-cloud-netflix-core-1.3.5.RELEASE.jar
+全限定符：org.springframework.cloud.netflix.ribbon
+**RibbonAutoConfiguration.class：**
+
+```java
+@Configuration
+@ConditionalOnClass({ IClient.class, RestTemplate.class, AsyncRestTemplate.class, Ribbon.class})
+@RibbonClients
+@AutoConfigureAfter(name = "org.springframework.cloud.netflix.eureka.EurekaClientAutoConfiguration")
+@AutoConfigureBefore({LoadBalancerAutoConfiguration.class, AsyncLoadBalancerAutoConfiguration.class})
+@EnableConfigurationProperties(RibbonEagerLoadProperties.class)
+public class RibbonAutoConfiguration {
+
+    // 略
+
+    @Bean
+    @ConditionalOnMissingBean(LoadBalancerClient.class)
+    public LoadBalancerClient loadBalancerClient() {
+        return new RibbonLoadBalancerClient(springClientFactory());
+    }
+
+        // 略
+}
+```
+
+先看配置条件项，RibbonAutoConfiguration配置必须在LoadBalancerAutoConfiguration配置前执行，因为在LoadBalancerAutoConfiguration配置中会使用RibbonLoadBalancerClient实例。
+
+RibbonLoadBalancerClient继承自LoadBalancerClient接口，是负载均衡客户端，也是负载均衡策略的调用方。
+
 # 参考资料
 
 [Spring Cloud Eureka详解]: https://blog.csdn.net/sunhuiliang85/article/details/76222517
+
+[微服务架构：Eureka参数配置项详解]: https://www.cnblogs.com/fangfuhai/p/7070325.html
+[撸一撸Spring Cloud Ribbon的原理]: https://www.cnblogs.com/kongxianghai/p/8445030.html
 
